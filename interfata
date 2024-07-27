@@ -1,0 +1,262 @@
+import sys
+import des
+from PyQt6 import QtGui, QtCore
+from PyQt6.QtCore import QSize, Qt, QEvent
+from PyQt6.QtGui import QFontDatabase,  QIcon
+from PyQt6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    QTextEdit,
+)
+
+
+def create_layout(msg):
+    func_layout = QHBoxLayout()
+    func_layout.setContentsMargins(0, 0, 0, 0)
+    widgets = []
+
+    func_label = QLabel(msg)
+    func_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    widgets.append(func_label)
+
+    func_textbox = QTextEdit()
+    func_textbox.setFixedSize(250, 170)
+    widgets.append(func_textbox)
+
+    for widget in widgets:
+        base_stylesheet = """ 
+                font-size: 20px;
+                font-family: 'Brasika Display - Trial';
+        """
+        if isinstance(widget, QLabel):
+            specific_stylesheet = "color : white;"
+        else:
+            specific_stylesheet = "color : black;"
+        if msg == "Encrypted message":
+            specific_stylesheet += ""
+
+        final_stylesheet = base_stylesheet + specific_stylesheet
+        widget.setStyleSheet(final_stylesheet)
+        func_layout.addWidget(widget)
+
+    return func_layout, widgets
+
+
+class RsaWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("DES decoder")
+        self.setFixedSize(QSize(500, 500))
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setWindowIcon(QtGui.QIcon("icons/main_icon.png"))
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        central_widget = QWidget()
+        central_widget.setObjectName("Container")
+        central_widget.setStyleSheet(""" 
+            #Container {
+            background: qlineargradient(x1: 0 y1:0, x2:1 y2:1, stop:0 #0061ff stop:1 #60efff);
+            border-radius: 5px;  
+        }""")
+        self.title_bar = CustomTitleBar(self)
+
+        work_space_layout = QVBoxLayout()
+        work_space_layout.setContentsMargins(10, 10, 10, 10)
+        work_space_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        input_layout, input_widgets = create_layout("Input message")
+        output_layout, output_widgets = create_layout("Encrypted message")
+
+        self.input_text_edit = input_widgets[1]
+        self.output_text_edit = output_widgets[1]
+
+        work_space_layout.addLayout(input_layout)
+        work_space_layout.addLayout(output_layout)
+
+        self.encrypt_button = QToolButton(self)
+        self.encrypt_button.setText("Encrypt")
+        self.encrypt_button.setStyleSheet("""
+            QToolButton{
+                  align-items: center;
+                  font-size: 20px;
+                  font-family: 'Brasika Display - Trial';
+                  background-color: #405cf5;
+                  border-radius: 6px;
+                  border-width: 0;
+                  box-shadow: rgba(50, 50, 93, .1) 0 0 0 1px inset,rgba(50, 50, 93, .1) 0 2px 5px 0,rgba(0, 0, 0, .07) 0 1px 1px 0;
+                  color: #fff;
+                  height: 44px;
+                  line-height: 1.15;
+                  margin: 12px 0 0;
+                  outline: none;
+                  overflow: hidden;
+                  padding: 0 25px;
+                  position: relative;
+                  text-align: center;
+            }             
+        """)
+
+        self.encrypt_button.clicked.connect(self.encrypt_message)
+
+        work_space_layout.addWidget(self.encrypt_button, alignment=QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignTop)
+
+        centra_widget_layout = QVBoxLayout()
+        centra_widget_layout.setContentsMargins(0, 0, 0, 0)
+        centra_widget_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        centra_widget_layout.addWidget(self.title_bar)
+        centra_widget_layout.addLayout(work_space_layout)
+
+        central_widget.setLayout(centra_widget_layout)
+        self.setCentralWidget(central_widget)
+
+    def encrypt_message(self):
+        message = self.input_text_edit.toPlainText()
+        ip = des.generate_ip()
+        ip_inv = des.generate_ip_inverse(ip)
+        pc1 = des.generate_pc1()
+        pc2 = des.generate_pc2()
+        key = des.generate_key()
+        e = des.generate_expansion_table()
+        s_boxes = des.generate_s_boxes()
+        p = des.generate_p_table()
+
+        # Genereaza subchei
+        subkeys = des.generate_subkeys(key, pc1, pc2)
+
+        # Message_bits va fi binar-ul string-ului message iar message_bits_padded va face message_bits sa fie padded padded
+        message_bits = des.string_to_bits(message)
+        message_bits_padded = des.pad_message(message_bits)
+
+        # Encripteaza mesajul si il printeaza
+        encrypted_message_bits = []
+        for i in range(0, len(message_bits_padded), 64):
+            block = message_bits_padded[i:i + 64]
+            encrypted_message_bits.extend(des.des_encrypt(block, subkeys, ip, ip_inv, e, s_boxes, p))
+
+        encrypted_message = ''.join(map(str, encrypted_message_bits))
+        self.output_text_edit.setPlainText(encrypted_message)
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            self.title_bar.window_state_changed(self.windowState())
+        super().changeEvent(event)
+        event.accept()
+
+    def window_state_changed(self, state):
+        self.normal_button.setVisible(state == Qt.WindowState.WindowMaximized)
+        self.max_button.setVisible(state != Qt.WindowState.WindowMaximized)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.initial_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self.initial_pos is not None:
+            delta = event.position().toPoint() - self.initial_pos
+            self.window().move(
+                self.window().x() + delta.x(),
+                self.window().y() + delta.y(),
+            )
+        super().mouseMoveEvent(event)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self.initial_pos = None
+        super().mouseReleaseEvent(event)
+        event.accept()
+
+
+class CustomTitleBar(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.initial_pos = None
+
+        title_bar_layout = QHBoxLayout(self)
+        title_bar_layout.setContentsMargins(11, 11, 11, 11)
+        title_bar_layout.setSpacing(2)
+
+        self.title = QLabel(f"{self.__class__.__name__}", self)
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        QFontDatabase.addApplicationFont("fonts/brasika-display-trial.otf")  # Brasika Display - Trial
+
+        self.title.setStyleSheet(
+            """ 
+                color: white;
+                text-transform: uppercase;
+                font-size: 20px;
+                font-family: 'Brasika Display - Trial';
+            """
+        )
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if title := parent.windowTitle():
+            self.title.setText(title)
+        title_bar_layout.addWidget(self.title)
+
+        # min
+        self.min_button = QToolButton(self)
+        min_icon = QIcon()
+        min_icon.addFile('icons/min.svg')
+        self.min_button.setIcon(min_icon)
+        self.min_button.clicked.connect(self.window().showMinimized)
+
+        # max
+        self.max_button = QToolButton(self)
+        max_icon = QIcon()
+        max_icon.addFile('icons/max.svg')
+        self.max_button.setIcon(max_icon)
+        self.max_button.clicked.connect(self.window().showMaximized)
+
+        # close
+        self.close_button = QToolButton(self)
+        close_icon = QIcon()
+        close_icon.addFile('icons/close.svg')
+        self.close_button.setIcon(close_icon)
+        self.close_button.clicked.connect(self.window().close)
+
+        # normal
+        self.normal_button = QToolButton(self)
+        normal_icon = QIcon()
+        normal_icon.addFile('icons/max.svg')
+        self.normal_button.setIcon(normal_icon)
+        self.normal_button.clicked.connect(self.window().showNormal)
+        self.normal_button.setVisible(False)
+
+        buttons = [
+            self.min_button,
+            self.max_button,
+            self.normal_button,
+            self.close_button,
+        ]
+        for button in buttons:
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setFixedSize(QSize(30, 30))
+            button.setStyleSheet(
+                """QToolButton {
+                    border: none;
+                    padding: 5px;
+                }
+                """
+            )
+            title_bar_layout.addWidget(button)
+
+    def window_state_changed(self, state):
+        if state == Qt.WindowState.WindowMaximized:
+            self.normal_button.setVisible(True)
+            self.max_button.setVisible(False)
+        else:
+            self.normal_button.setVisible(False)
+            self.max_button.setVisible(True)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = RsaWindow()
+    window.show()
+    sys.exit(app.exec())
