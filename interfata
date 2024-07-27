@@ -1,3 +1,4 @@
+pip install PyQt6
 import sys
 import des
 from PyQt6 import QtGui, QtCore
