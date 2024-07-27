@@ -1,0 +1,7 @@
+This is the file that needs to be read by the code to work, you can change the contents of the file.
+This was made by Felicia,Polina and Maria.
+GirlsGoIT
+
+Acesta este fișierul care trebuie citit de cod pentru a funcționa, puteți modifica conținutul fișierului.
+Acesta a fost făcut de Felicia, Polina și Maria.
+GirlsGoIT
